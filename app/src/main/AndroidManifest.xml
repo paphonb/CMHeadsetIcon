@@ -16,7 +16,7 @@
             android:value="82" />
         <meta-data
             android:name="xposeddescription"
-            android:value="Replaces battery meter with AOSPA's circle one" />
+            android:value="Show headset icon in statusbar when headset is plugged in" />
 
     </application>
 
