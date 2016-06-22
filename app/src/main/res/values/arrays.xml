@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="icons_name">
+        <item>@string/earbuds</item>
+        <item>@string/headphone</item>
+        <item>@string/headset</item>
+        <item>@string/headset_dock</item>
+        <item>@string/speaker</item>
+    </string-array>
+</resources>

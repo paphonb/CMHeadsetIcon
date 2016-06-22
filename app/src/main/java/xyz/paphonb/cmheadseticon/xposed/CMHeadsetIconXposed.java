@@ -4,47 +4,50 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.res.Resources;
-import android.content.res.XModuleResources;
 import android.os.Handler;
 import android.util.Log;
 
 import java.util.Objects;
 
-import de.robv.android.xposed.IXposedHookInitPackageResources;
 import de.robv.android.xposed.IXposedHookLoadPackage;
-import de.robv.android.xposed.IXposedHookZygoteInit;
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XC_MethodReplacement;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_InitPackageResources;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import xyz.paphonb.cmheadseticon.ConfigUtils;
+import xyz.paphonb.cmheadseticon.MainActivity;
 import xyz.paphonb.cmheadseticon.R;
 
-public class CMHeadsetIconXposed implements IXposedHookLoadPackage, IXposedHookInitPackageResources, IXposedHookZygoteInit {
+public class CMHeadsetIconXposed implements IXposedHookLoadPackage {
     public static final String PACKAGE_SYSTEMUI = "com.android.systemui";
-    private static final Object SLOT_HEADSET = "headset";
+    private static final String SLOT_HEADSET = "headset";
+    private static final String SLOT_HEADPHONE = "headphone";
     private static final String PACKAGE_ANDROID = "android";
-    private static String MODULE_PATH = null;
+    public static final String PACKAGE_OWN = "xyz.paphonb.cmheadseticon";
+    private static final String MAIN_ACTIVITY = PACKAGE_OWN + ".MainActivity";
+    private static final String TAG = "CMHeadsetIconXposed";
+    private int mState = 0;
+    private int mMicrophone = 0;
     private Object mService;
     private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equals(Intent.ACTION_HEADSET_PLUG)) {
                 updateHeadset(intent);
+            } else if (intent.getAction().equals(MainActivity.ICON_CHANGED)) {
+                updateHeadsetIcon(intent);
             }
         }
     };
 
     @Override
-    public void initZygote(StartupParam startupParam) throws Throwable {
-        MODULE_PATH = startupParam.modulePath;
-    }
-
-    @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
         hookSystemUI(lpparam);
         hookAndroid(lpparam);
+
+        if (!lpparam.packageName.equals(PACKAGE_OWN)) return;
+        XposedHelpers.findAndHookMethod(MAIN_ACTIVITY, lpparam.classLoader, "isActivated", XC_MethodReplacement.returnConstant(true));
     }
 
     private void hookAndroid(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -57,12 +60,12 @@ public class CMHeadsetIconXposed implements IXposedHookLoadPackage, IXposedHookI
                 String[] slots = (String[]) param.args[0];
                 int N = slots.length;
 
-                String[] newSlots = new String[N + 1];
-                for (int i = 0, j = 0; i < N + 1; i++) {
+                String[] newSlots = new String[N + 2];
+                for (int i = 0, j = 0; i < N + 2; i++) {
                     newSlots[i] = slots[j];
                     if (Objects.equals(slots[j], "speakerphone")) {
-                        i++;
-                        newSlots[i] = "headset";
+                        newSlots[++i] = "headset";
+                        newSlots[++i] = "headphone";
                     }
                     j++;
                 }
@@ -79,29 +82,65 @@ public class CMHeadsetIconXposed implements IXposedHookLoadPackage, IXposedHookI
             @Override
             protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                 Context context = (Context) XposedHelpers.getObjectField(param.thisObject, "mContext");
-                Resources res = context.getResources();
 
                 mService = XposedHelpers.getObjectField(param.thisObject, "mService");
-                XposedHelpers.callMethod(mService, "setIcon", SLOT_HEADSET, res.getIdentifier("stat_sys_ethernet", "drawable", PACKAGE_SYSTEMUI), 0, null);
-                XposedHelpers.callMethod(mService, "setIconVisibility", SLOT_HEADSET, false);
+
+                setIcon(SLOT_HEADSET, ConfigUtils.icons().headset, 0, null);
+                setIconVisibility(SLOT_HEADSET, false);
+
+                setIcon(SLOT_HEADPHONE, ConfigUtils.icons().headphone, 0, null);
+                setIconVisibility(SLOT_HEADPHONE, false);
 
                 IntentFilter filter = new IntentFilter();
                 filter.addAction(Intent.ACTION_HEADSET_PLUG);
+                filter.addAction(MainActivity.ICON_CHANGED);
                 context.registerReceiver(mIntentReceiver, filter, null, (Handler) XposedHelpers.getObjectField(param.thisObject, "mHandler"));
             }
         });
     }
 
-    private void updateHeadset(Intent intent) {
-        int state = intent.getIntExtra("state", 0);
-        XposedHelpers.callMethod(mService, "setIconVisibility", SLOT_HEADSET, state == 1);
+    public void setIcon(String slot, int iconId, int iconLevel, String contentDescription) {
+        try {
+            Object svc = XposedHelpers.callMethod(mService, "getService");
+            if (svc != null) {
+                XposedHelpers.callMethod(svc, "setIcon", slot, PACKAGE_OWN, iconId, iconLevel, contentDescription);
+            }
+        } catch (Throwable ex) {
+            // system process is dead anyway.
+            throw new RuntimeException(ex);
+        }
     }
 
-    @Override
-    public void handleInitPackageResources(XC_InitPackageResources.InitPackageResourcesParam resparam) throws Throwable {
-        if (!resparam.packageName.equals(PACKAGE_SYSTEMUI)) return;
+    public void setIconVisibility(String slot, boolean visible) {
+        try {
+            Object svc = XposedHelpers.callMethod(mService, "getService");
+            if (svc != null) {
+                XposedHelpers.callMethod(svc, "setIconVisibility", slot, visible);
+            }
+        } catch (Throwable ex) {
+            // system process is dead anyway.
+            throw new RuntimeException(ex);
+        }
+    }
 
-        XModuleResources modRes = XModuleResources.createInstance(MODULE_PATH, resparam.res);
-        resparam.res.setReplacement(PACKAGE_SYSTEMUI, "drawable", "stat_sys_ethernet", modRes.fwd(R.drawable.stat_sys_headset));
+    private void updateHeadset(Intent intent) {
+        mState = intent.getIntExtra("state", 0);
+        mMicrophone = intent.getIntExtra("microphone", 0);
+
+        updateIconVisibilities();
+    }
+
+    private void updateIconVisibilities() {
+        setIconVisibility(SLOT_HEADSET, mState != 0 && mMicrophone == 1);
+        setIconVisibility(SLOT_HEADPHONE, mState != 0 && mMicrophone == 0);
+    }
+
+    private void updateHeadsetIcon(Intent intent) {
+        int type = intent.getIntExtra(MainActivity.EXTRA_ICON_TYPE, 0);
+        int value = intent.getIntExtra(MainActivity.EXTRA_ICON_VALUE, 0);
+
+        setIcon(type == 0 ? SLOT_HEADSET : SLOT_HEADPHONE, MainActivity.ICONS[value], 0, null);
+
+        updateIconVisibilities();
     }
 }

@@ -1,3 +1,18 @@
 <resources>
-    <string name="app_name">CM Headset Icon</string>
+    <string name="app_name">Statusbar Headset Icon</string>
+
+    <string name="earbuds">Earbuds</string>
+    <string name="headset">Headphone with mic</string>
+    <string name="headset_dock">Dock</string>
+    <string name="headphone">Headphone without mic</string>
+    <string name="speaker">Speaker</string>
+    <string name="with_mic">With microphone</string>
+    <string name="without_mic">Without microphone</string>
+    <string name="module_not_activated">Please activate the module and restart.\nTap to open Xposed Installer.</string>
+    <string name="xposed_required">This app is an Xposed module and can\'t do anything without Xposed.</string>
+    <string name="rate">Rate</string>
+    <string name="thanks">Thank you for supporting the dev!</string>
+    <string name="refund_warning">If you don\'t know what is Xposed, you can get a refund through the Play Store.</string>
+    <string name="play_store">Play Store</string>
+    <string name="hide_app_icon">Hide app icon</string>
 </resources>
